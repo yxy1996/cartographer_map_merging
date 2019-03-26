@@ -34,7 +34,6 @@
  *  POSSIBILITY OF SUCH DAMAGE.
  *
  *********************************************************************/
-
 #include <thread>
 
 #include <map_merge/map_merge.h>
@@ -42,7 +41,135 @@
 #include <ros/console.h>
 #include <tf2_geometry_msgs/tf2_geometry_msgs.h>
 
-namespace map_merge
+namespace map_merge      // we already know this robot
+96
+      continue;
+97
+    }
+98
+​
+99
+    if (have_initial_poses_ && !getInitPose(robot_name, init_pose)) {
+100
+      ROS_WARN("Couldn't get initial position for robot [%s]\n"
+101
+               "did you defined parameters map_merge/init_pose_[xyz]? in robot "
+102
+               "namespace? If you want to run merging without known initial "
+103
+               "positions of robots please set `known_init_poses` parameter "
+104
+               "to false. See relavant documentation for details.",
+105
+               robot_name.c_str());
+106
+      continue;
+107
+    }
+108
+​
+109
+    ROS_INFO("adding robot [%s] to system", robot_name.c_str());
+110
+    {
+111
+      std::lock_guard<boost::shared_mutex> lock(subscriptions_mutex_);
+112
+      subscriptions_.emplace_front();
+113
+      ++subscriptions_size_;
+114
+    }
+115
+​
+116
+    // no locking here. robots_ are used only in this procedure
+117
+    MapSubscription& subscription = subscriptions_.front();
+118
+    robots_.insert({robot_name, &subscription});
+119
+    subscription.initial_pose = init_pose;
+120
+​
+121
+    /* subscribe callbacks */
+122
+    map_topic = ros::names::append(robot_name, robot_map_topic_);
+123
+    map_updates_topic =
+124
+        ros::names::append(robot_name, robot_map_updates_topic_);
+125
+    ROS_INFO("Subscribing to MAP topic: %s.", map_topic.c_str());
+126
+    subscription.map_sub = node_.subscribe<nav_msgs::OccupancyGrid>(
+127
+        map_topic, 50,
+128
+        [this, &subscription](const nav_msgs::OccupancyGrid::ConstPtr& msg) {
+129
+          fullMapUpdate(msg, subscription);
+130
+        });
+131
+    ROS_INFO("Subscribing to MAP updates topic: %s.",
+132
+             map_updates_topic.c_str());
+133
+    subscription.map_updates_sub =
+134
+        node_.subscribe<map_msgs::OccupancyGridUpdate>(
+135
+            map_updates_topic, 50,
+136
+            [this, &subscription](
+137
+                const map_msgs::OccupancyGridUpdate::ConstPtr& msg) {
+138
+              partialMapUpdate(msg, subscription);
+139
+            });
+140
+  }
+141
+}
+142
+​
+143
+/*
+144
+ * mapMerging()
+145
+ */
+146
+void MapMerge::mapMerging()
+147
+{
+148
+  ROS_DEBUG("Map merging started.");
+149
+​
+150
+  if (have_initial_poses_) {
+151
+    std::vector<nav_msgs::OccupancyGridConstPtr> grids;
+152
+    std::vector<geometry_msgs::Transform> transforms;
+153
+    grids.reserve(subscriptions_size_);
+154
+    {
+155
+      boost::shared_lock<boost::shared_mutex> lock(subscriptions_mutex_);
+156
+      for (auto& subscription : subscriptions_) {
+157
+        std::lock_guard<std::mutex> s_lock(subscription.mutex);
+158
+        grids.push_back(subscription.readonly_map);
+159
+        transforms.push_back(subscription.initial_pose);
 {
 MapMerge::MapMerge() : subscriptions_size_(0)
 {
@@ -61,7 +188,7 @@ MapMerge::MapMerge() : subscriptions_size_(0)
   private_nh.param<std::string>("robot_namespace", robot_namespace_, "");
   private_nh.param<std::string>("merged_map_topic", merged_map_topic, "map");
   private_nh.param<std::string>("world_frame", world_frame_, "world");
-
+  
   /* publishing */
   merged_map_publisher_ =
       node_.advertise<nav_msgs::OccupancyGrid>(merged_map_topic, 50, true);
@@ -128,15 +255,6 @@ void MapMerge::topicSubscribing()
         [this, &subscription](const nav_msgs::OccupancyGrid::ConstPtr& msg) {
           fullMapUpdate(msg, subscription);
         });
-    ROS_INFO("Subscribing to MAP updates topic: %s.",
-             map_updates_topic.c_str());
-    subscription.map_updates_sub =
-        node_.subscribe<map_msgs::OccupancyGridUpdate>(
-            map_updates_topic, 50,
-            [this, &subscription](
-                const map_msgs::OccupancyGridUpdate::ConstPtr& msg) {
-              partialMapUpdate(msg, subscription);
-            });
   }
 }
 
@@ -158,11 +276,12 @@ void MapMerge::mapMerging()
         grids.push_back(subscription.readonly_map);
         transforms.push_back(subscription.initial_pose);
       }
+    pipeline_.feed(grids.begin(), grids.end());
+    pipeline_.setTransforms(transforms.begin(), transforms.end());
     }
     // we don't need to lock here, because when have_initial_poses_ is true we
     // will not run concurrently on the pipeline
-    pipeline_.feed(grids.begin(), grids.end());
-    pipeline_.setTransforms(transforms.begin(), transforms.end());
+
   }
 
   nav_msgs::OccupancyGridPtr merged_map;
@@ -184,25 +303,6 @@ void MapMerge::mapMerging()
   merged_map_publisher_.publish(merged_map);
 }
 
-void MapMerge::poseEstimation()
-{
-  ROS_DEBUG("Grid pose estimation started.");
-  std::vector<nav_msgs::OccupancyGridConstPtr> grids;
-  grids.reserve(subscriptions_size_);
-  {
-    boost::shared_lock<boost::shared_mutex> lock(subscriptions_mutex_);
-    for (auto& subscription : subscriptions_) {
-      std::lock_guard<std::mutex> s_lock(subscription.mutex);
-      grids.push_back(subscription.readonly_map);
-    }
-  }
-
-  std::lock_guard<std::mutex> lock(pipeline_mutex_);
-  pipeline_.feed(grids.begin(), grids.end());
-  // TODO allow user to change feature type
-  pipeline_.estimateTransforms(combine_grids::FeatureType::AKAZE,
-                               confidence_threshold_);
-}
 
 void MapMerge::fullMapUpdate(const nav_msgs::OccupancyGrid::ConstPtr& msg,
                              MapSubscription& subscription)
@@ -219,78 +319,6 @@ void MapMerge::fullMapUpdate(const nav_msgs::OccupancyGrid::ConstPtr& msg,
   subscription.writable_map = nullptr;
 }
 
-void MapMerge::partialMapUpdate(
-    const map_msgs::OccupancyGridUpdate::ConstPtr& msg,
-    MapSubscription& subscription)
-{
-  ROS_DEBUG("received partial map update");
-
-  if (msg->x < 0 || msg->y < 0) {
-    ROS_ERROR("negative coordinates, invalid update. x: %d, y: %d", msg->x,
-              msg->y);
-    return;
-  }
-
-  size_t x0 = static_cast<size_t>(msg->x);
-  size_t y0 = static_cast<size_t>(msg->y);
-  size_t xn = msg->width + x0;
-  size_t yn = msg->height + y0;
-
-  nav_msgs::OccupancyGridPtr map;
-  nav_msgs::OccupancyGridConstPtr readonly_map;  // local copy
-  {
-    // load maps
-    std::lock_guard<std::mutex> lock(subscription.mutex);
-    map = subscription.writable_map;
-    readonly_map = subscription.readonly_map;
-  }
-
-  if (!readonly_map) {
-    ROS_WARN("received partial map update, but don't have any full map to "
-             "update. skipping.");
-    return;
-  }
-
-  // we don't have partial map to take update, we must copy readonly map and
-  // update new writable map
-  if (!map) {
-    map.reset(new nav_msgs::OccupancyGrid(*readonly_map));
-  }
-
-  size_t grid_xn = map->info.width;
-  size_t grid_yn = map->info.height;
-
-  if (xn > grid_xn || x0 > grid_xn || yn > grid_yn || y0 > grid_yn) {
-    ROS_WARN("received update doesn't fully fit into existing map, "
-             "only part will be copied. received: [%lu, %lu], [%lu, %lu] "
-             "map is: [0, %lu], [0, %lu]",
-             x0, xn, y0, yn, grid_xn, grid_yn);
-  }
-
-  // update map with data
-  size_t i = 0;
-  for (size_t y = y0; y < yn && y < grid_yn; ++y) {
-    for (size_t x = x0; x < xn && x < grid_xn; ++x) {
-      size_t idx = y * grid_xn + x;  // index to grid for this specified cell
-      map->data[idx] = msg->data[i];
-      ++i;
-    }
-  }
-  // update time stamp
-  map->header.stamp = msg->header.stamp;
-
-  {
-    // store back updated map
-    std::lock_guard<std::mutex> lock(subscription.mutex);
-    if (subscription.readonly_map &&
-        subscription.readonly_map->header.stamp > map->header.stamp) {
-      // we have been overrunned by faster update. our work was useless.
-      return;
-    }
-    subscription.writable_map = map;
-    subscription.readonly_map = map;
-  }
-}
 
 std::string MapMerge::robotNameFromTopic(const std::string& topic)
 {
@@ -366,18 +394,6 @@ void MapMerge::executetopicSubscribing()
   }
 }
 
-void MapMerge::executeposeEstimation()
-{
-  if (have_initial_poses_)
-    return;
-
-  ros::Rate r(estimation_rate_);
-  while (node_.ok()) {
-    poseEstimation();
-    r.sleep();
-  }
-}
-
 /*
  * spin()
  */
@@ -386,9 +402,7 @@ void MapMerge::spin()
   ros::spinOnce();
   std::thread merging_thr([this]() { executemapMerging(); });
   std::thread subscribing_thr([this]() { executetopicSubscribing(); });
-  std::thread estimation_thr([this]() { executeposeEstimation(); });
-  ros::spin();
-  estimation_thr.join();
+  ros::spin();	
   merging_thr.join();
   subscribing_thr.join();
 }
@@ -407,3 +421,4 @@ int main(int argc, char** argv)
   map_merging.spin();
   return 0;
 }
+
