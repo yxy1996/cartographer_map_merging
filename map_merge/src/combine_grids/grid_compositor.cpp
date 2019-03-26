@@ -80,10 +80,10 @@ nav_msgs::OccupancyGrid::Ptr GridCompositor::compose(
   for (size_t i = 0; i < grids.size(); ++i) {								
     // we need to compensate global offset
     cv::Rect roi = cv::Rect(corners[i] - dst_roi.tl(), sizes[i]);
-    cv::Mat result_roi(result, roi);								
+    cv::Mat result_roi(result, roi);								//last global grid  : result_roi
     // reinterpret warped matrix as signed
     // we will not change this matrix, but opencv does not support const matrices
-    //cv::Mat warped_signed (grids[i].size(), CV_8S, const_cast<uchar*>(grids[i].ptr()));	
+    //cv::Mat warped_signed (grids[i].size(), CV_8S, const_cast<uchar*>(grids[i].ptr()));		//current input grid : warped_signed
     // compose img into result matrix
     
     for (int k=0;k<result_roi.size().height;k++)
