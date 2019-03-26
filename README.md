@@ -27,6 +27,12 @@ Packages are documented at ROS wiki.
 * [explore_lite](http://wiki.ros.org/explore_lite)
 * [multirobot_map_merge](http://wiki.ros.org/multirobot_map_merge)
 
+Modification
+----
+
+Modified to support cartographer， as the origin version does not work.
+
+
 COPYRIGHT
 ---------
 
