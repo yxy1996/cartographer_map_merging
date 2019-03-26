@@ -30,7 +30,7 @@ Packages are documented at ROS wiki.
 Modification
 ----
 
-Modified to support cartographer， as the origin version does not work.
+Modified to support cartographer, as the origin version does not work.
 
 
 COPYRIGHT
