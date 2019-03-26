@@ -1,5 +1,5 @@
 cmake_minimum_required(VERSION 2.8.3)
-project(multirobot_map_merge)
+project(super_multirobot_map_merge)
 
 ## Find catkin macros and libraries
 find_package(catkin REQUIRED COMPONENTS
@@ -89,24 +89,24 @@ install(DIRECTORY launch/
 #############
 ## Testing ##
 #############
-if(CATKIN_ENABLE_TESTING)
-  find_package(roslaunch REQUIRED)
+#if(CATKIN_ENABLE_TESTING)
+#  find_package(roslaunch REQUIRED)
 
   # download test data
-  set(base_url https://raw.githubusercontent.com/hrnr/m-explore-extra/master/map_merge)
-  catkin_download_test_data(${PROJECT_NAME}_map00.pgm ${base_url}/hector_maps/map00.pgm MD5 915609a85793ec1375f310d44f2daf87)
-  catkin_download_test_data(${PROJECT_NAME}_map05.pgm ${base_url}/hector_maps/map05.pgm MD5 cb9154c9fa3d97e5e992592daca9853a)
-  catkin_download_test_data(${PROJECT_NAME}_2011-08-09-12-22-52.pgm ${base_url}/gmapping_maps/2011-08-09-12-22-52.pgm MD5 3c2c38e7dec2b7a67f41069ab58badaa)
-  catkin_download_test_data(${PROJECT_NAME}_2012-01-28-11-12-01.pgm ${base_url}/gmapping_maps/2012-01-28-11-12-01.pgm MD5 681e704044889c95e47b0c3aadd81f1e)
+#  set(base_url https://raw.githubusercontent.com/hrnr/m-explore-extra/master/map_merge)
+#  catkin_download_test_data(${PROJECT_NAME}_map00.pgm ${base_url}/hector_maps/map00.pgm MD5 915609a85793ec1375f310d44f2daf87)
+#  catkin_download_test_data(${PROJECT_NAME}_map05.pgm ${base_url}/hector_maps/map05.pgm MD5 cb9154c9fa3d97e5e992592daca9853a)
+#  catkin_download_test_data(${PROJECT_NAME}_2011-08-09-12-22-52.pgm ${base_url}/gmapping_maps/2011-08-09-12-22-52.pgm MD5 3c2c38e7dec2b7a67f41069ab58badaa)
+#  catkin_download_test_data(${PROJECT_NAME}_2012-01-28-11-12-01.pgm ${base_url}/gmapping_maps/2012-01-28-11-12-01.pgm MD5 681e704044889c95e47b0c3aadd81f1e)
 
-  catkin_add_gtest(test_merging_pipeline test/test_merging_pipeline.cpp)
+#  catkin_add_gtest(test_merging_pipeline test/test_merging_pipeline.cpp)
   # ensure that test data are downloaded before we run tests
-  add_dependencies(test_merging_pipeline ${PROJECT_NAME}_map00.pgm ${PROJECT_NAME}_map05.pgm ${PROJECT_NAME}_2011-08-09-12-22-52.pgm ${PROJECT_NAME}_2012-01-28-11-12-01.pgm)
-  target_link_libraries(test_merging_pipeline combine_grids ${catkin_LIBRARIES})
+#  add_dependencies(test_merging_pipeline ${PROJECT_NAME}_map00.pgm ${PROJECT_NAME}_map05.pgm ${PROJECT_NAME}_2011-08-09-12-22-52.pgm ${PROJECT_NAME}_2012-01-28-11-12-01.pgm)
+#  target_link_libraries(test_merging_pipeline combine_grids ${catkin_LIBRARIES})
 
   # test all launch files
   # do not test from_map_server.launch as we don't want to add dependency on map_server and this
   # launchfile is not critical
-  roslaunch_add_file_check(launch/map_merge.launch)
-  roslaunch_add_file_check(launch/experiments)
-endif()
+#  roslaunch_add_file_check(launch/map_merge.launch)
+#  roslaunch_add_file_check(launch/experiments)
+#endif()

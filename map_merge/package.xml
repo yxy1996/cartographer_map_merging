@@ -1,6 +1,6 @@
 <?xml version="1.0"?>
 <package format="2">
-  <name>multirobot_map_merge</name>
+  <name>super_multirobot_map_merge</name>
   <version>2.1.1</version>
 
   <description>Merging multiple maps without knowledge of initial
