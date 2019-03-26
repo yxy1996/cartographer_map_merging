@@ -2,6 +2,7 @@
  *
  * Software License Agreement (BSD License)
  *
+ *  Copyright (c) 2014, Zhi Yan.
  *  Copyright (c) 2015-2016, Jiri Horner.
  *  All rights reserved.
  *
@@ -33,7 +34,6 @@
  *  POSSIBILITY OF SUCH DAMAGE.
  *
  *********************************************************************/
-
 #include <combine_grids/grid_compositor.h>
 
 #include <opencv2/stitching/detail/util.hpp>
@@ -55,9 +55,13 @@ nav_msgs::OccupancyGrid::Ptr GridCompositor::compose(
   corners.reserve(grids.size());
   std::vector<cv::Size> sizes;
   sizes.reserve(grids.size());
+
   for (auto& roi : rois) {
+
     corners.push_back(roi.tl());
+	//std::cout<<roi.tl()<<std::endl;
     sizes.push_back(roi.size());
+	//std::cout<<roi.size()<<std::endl;
   }
   cv::Rect dst_roi = cv::detail::resultRoi(corners, sizes);
 
@@ -67,15 +71,51 @@ nav_msgs::OccupancyGrid::Ptr GridCompositor::compose(
   // create view for opencv pointing to newly allocated grid
   cv::Mat result(dst_roi.size(), CV_8S, result_grid->data.data());
 
-  for (size_t i = 0; i < grids.size(); ++i) {
+  
+  //cartographer融合两个地图方法：
+  // 1.P = P1*P2/(1-P1-P2+2*P1*P2)
+  // 2.若P1、P2中有负的，则100*P<0
+  // 3.令100*P小于0的置为0 (能否置为 -1 ?)
+  // 4.恢复到 OccupancyGrid 中。
+  for (size_t i = 0; i < grids.size(); ++i) {								
     // we need to compensate global offset
     cv::Rect roi = cv::Rect(corners[i] - dst_roi.tl(), sizes[i]);
-    cv::Mat result_roi(result, roi);
+    cv::Mat result_roi(result, roi);								
     // reinterpret warped matrix as signed
     // we will not change this matrix, but opencv does not support const matrices
-    cv::Mat warped_signed (grids[i].size(), CV_8S, const_cast<uchar*>(grids[i].ptr()));
+    //cv::Mat warped_signed (grids[i].size(), CV_8S, const_cast<uchar*>(grids[i].ptr()));	
     // compose img into result matrix
-    cv::max(result_roi, warped_signed, result_roi);
+    
+    for (int k=0;k<result_roi.size().height;k++)
+    {
+      signed char* indata10 = result_roi.ptr<signed char>(k);
+      const signed char* indata20 = grids[i].ptr<signed char>(k);
+      for (int j=0;j<result_roi.size().width;j++)
+      {
+	if (indata10[j]>=0 && indata20[j]>=0)
+	  {
+	    float p1 = (float)indata10[j]/100;
+	    float p2 = (float)indata20[j]/100;
+	    
+	    double medi = (p1)*(p2)/(1-p1-p2+2*p1*p2);
+	    indata10[j] = (int)(medi*100);
+	    continue;
+	  }
+	  if (indata10[j]==-1 && indata20[j]==-1)
+	  {
+	    indata10[j]=-1;
+	    continue;
+	  }
+	   if (indata10[j]>=0 && indata20[j]==-1)
+	  {
+	   continue;    
+	  }
+	  if (indata10[j]==-1 && indata20[j]>=0)
+	  {
+	    indata10[j] = indata20[j];
+	  }
+      }     
+    }
   }
 
   return result_grid;
