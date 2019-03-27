@@ -29,7 +29,6 @@ Launch
 
 ```
  	 roslaunch super_multirobot_map_merge map_merge.launch 
-
 ```
 
 
